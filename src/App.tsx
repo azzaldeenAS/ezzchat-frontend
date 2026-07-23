@@ -13,7 +13,6 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_API_URL || 'https://ezzchat-bac
 export const App: React.FC = () => {
   const [user, setUser] = useState<{ id: string, name: string, email?: string } | null>(null);
   
-  // Auth state
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -24,9 +23,15 @@ export const App: React.FC = () => {
   const [activeConversation, setActiveConversation] = useState<string>('group_zero');
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [inCall, setInCall] = useState(false);
   const [callToken, setCallToken] = useState('');
+
+  // Audio recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const localMessages = useLiveQuery(
     () => db.messages.where('conversationId').equals(activeConversation).sortBy('timestamp'),
@@ -38,11 +43,8 @@ export const App: React.FC = () => {
   }, [localMessages]);
 
   useEffect(() => {
-    // Check active Supabase session on load
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        handleSuccessfulLogin(session.user);
-      }
+      if (session?.user) handleSuccessfulLogin(session.user);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -72,22 +74,16 @@ export const App: React.FC = () => {
 
     try {
       if (isLoginMode) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: emailInput,
-          password: passwordInput,
-        });
+        const { error } = await supabase.auth.signInWithPassword({ email: emailInput, password: passwordInput });
         if (error) throw error;
       } else {
         if (!nameInput) return setAuthError('Name is required for Signup');
         const { error } = await supabase.auth.signUp({
-          email: emailInput,
-          password: passwordInput,
-          options: {
-            data: { full_name: nameInput }
-          }
+          email: emailInput, password: passwordInput,
+          options: { data: { full_name: nameInput } }
         });
         if (error) throw error;
-        alert('Signup successful! Check your email to verify (if enabled) or just login!');
+        alert('Signup successful! Login now.');
         setIsLoginMode(true);
       }
     } catch (err: any) {
@@ -97,9 +93,7 @@ export const App: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-      });
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
       if (error) throw error;
     } catch (err: any) {
       setAuthError(err.message);
@@ -120,9 +114,7 @@ export const App: React.FC = () => {
       });
     }
 
-    const newSocket = io(BACKEND_URL, {
-      auth: { userId: loggedInUser.id }
-    });
+    const newSocket = io(BACKEND_URL, { auth: { userId: loggedInUser.id } });
 
     newSocket.on('connect', () => {
       newSocket.emit('join_group', 'group_zero');
@@ -142,6 +134,8 @@ export const App: React.FC = () => {
         senderId: data.senderId,
         senderName: data.senderName,
         text: plainText,
+        type: data.type || 'text',
+        mediaData: data.mediaData,
         status: 'delivered',
         timestamp: data.timestamp
       });
@@ -150,18 +144,18 @@ export const App: React.FC = () => {
     setSocket(newSocket);
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || !socket || !user) return;
-
+  const sendPayload = async (text: string, type: 'text' | 'image' | 'audio' | 'file' = 'text', mediaData?: string) => {
+    if (!socket || !user) return;
     const pubKey = localStorage.getItem('ezzchat_public_key') || '';
-    const encryptedText = await encryptMsg(inputText, pubKey);
+    const encryptedText = await encryptMsg(text, pubKey);
 
     const newMsg = {
       conversationId: activeConversation,
       senderId: user.id,
       senderName: user.name,
-      text: inputText, 
+      text, 
+      type,
+      mediaData,
       status: 'sent' as const,
       timestamp: Date.now()
     };
@@ -171,10 +165,71 @@ export const App: React.FC = () => {
     socket.emit('group_message', {
       groupId: 'group_zero',
       senderName: user.name,
-      encryptedText
+      encryptedText,
+      type,
+      mediaData
     });
+  };
 
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim()) return;
+    await sendPayload(inputText, 'text');
     setInputText('');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File is too large! Maximum allowed is 5MB for Zero-Cost mode.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      const type = file.type.startsWith('image/') ? 'image' : 'file';
+      await sendPayload(file.name, type, base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = reader.result as string;
+          await sendPayload('Voice Note', 'audio', base64);
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("Microphone access denied!");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
   };
 
   const startCall = async () => {
@@ -218,25 +273,10 @@ export const App: React.FC = () => {
 
           <form onSubmit={handleEmailAuth}>
             {!isLoginMode && (
-              <input 
-                type="text" 
-                placeholder="Full Name" 
-                value={nameInput} 
-                onChange={e => setNameInput(e.target.value)} 
-              />
+              <input type="text" placeholder="Full Name" value={nameInput} onChange={e => setNameInput(e.target.value)} />
             )}
-            <input 
-              type="email" 
-              placeholder="Email Address" 
-              value={emailInput} 
-              onChange={e => setEmailInput(e.target.value)} 
-            />
-            <input 
-              type="password" 
-              placeholder="Password" 
-              value={passwordInput} 
-              onChange={e => setPasswordInput(e.target.value)} 
-            />
+            <input type="email" placeholder="Email Address" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
+            <input type="password" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
             <button type="submit">{isLoginMode ? 'Login' : 'Create Account'}</button>
           </form>
 
@@ -262,13 +302,10 @@ export const App: React.FC = () => {
       {inCall && (
         <div className="call-modal">
            <LiveKitRoom
-              video={true}
-              audio={true}
-              token={callToken}
+              video={true} audio={true} token={callToken}
               serverUrl={import.meta.env.VITE_LIVEKIT_URL || 'wss://ezzchat-u6d2le0b.livekit.cloud'}
               onDisconnected={() => setInCall(false)}
-              data-lk-theme="default"
-              style={{ height: '100vh', width: '100vw' }}
+              data-lk-theme="default" style={{ height: '100vh', width: '100vw' }}
             >
               <VideoConference />
               <RoomAudioRenderer />
@@ -332,7 +369,14 @@ export const App: React.FC = () => {
               <div key={msg.id} className={`message-wrapper ${isMe ? 'me' : 'them'}`}>
                 {!isMe && <span className="sender-name">{msg.senderName || 'Unknown'}</span>}
                 <div className={`message ${isMe ? 'sent' : 'received'}`}>
-                  <div>{msg.text}</div>
+                  {msg.type === 'text' && <div>{msg.text}</div>}
+                  {msg.type === 'image' && <img src={msg.mediaData} alt="attachment" style={{maxWidth: '200px', borderRadius: '8px'}} />}
+                  {msg.type === 'audio' && <audio src={msg.mediaData} controls style={{width: '200px'}} />}
+                  {msg.type === 'file' && (
+                    <a href={msg.mediaData} download={msg.text} style={{color: isMe ? 'white' : 'var(--accent)', textDecoration: 'underline'}}>
+                      📄 {msg.text}
+                    </a>
+                  )}
                   <span className="message-time">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
@@ -345,11 +389,35 @@ export const App: React.FC = () => {
 
         <form className="input-area" onSubmit={sendMessage}>
           <input 
+            type="file" 
+            ref={fileInputRef} 
+            style={{display: 'none'}} 
+            onChange={handleFileUpload} 
+          />
+          <button type="button" className="icon-btn" onClick={() => fileInputRef.current?.click()} title="Attach File">
+            📎
+          </button>
+          
+          <input 
             value={inputText} 
             onChange={e => setInputText(e.target.value)} 
-            placeholder="Type a secure message..."
+            placeholder={isRecording ? "Recording audio..." : "Type a secure message..."}
+            disabled={isRecording}
           />
-          <button type="submit" className="send-btn" disabled={!inputText.trim()}>
+
+          <button 
+            type="button" 
+            className={`icon-btn ${isRecording ? 'recording' : ''}`} 
+            onMouseDown={startRecording} 
+            onMouseUp={stopRecording}
+            onTouchStart={startRecording}
+            onTouchEnd={stopRecording}
+            title="Hold to Record Voice"
+          >
+            🎤
+          </button>
+
+          <button type="submit" className="send-btn" disabled={!inputText.trim() && !isRecording}>
             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
           </button>
         </form>

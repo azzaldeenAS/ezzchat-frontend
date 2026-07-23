@@ -14,7 +14,9 @@ export interface LocalMessage {
   conversationId: string;
   senderId: string;
   senderName?: string;
-  text: string; // This is the DECRYPTED text
+  text: string; // DECRYPTED text or filename
+  type?: 'text' | 'image' | 'audio' | 'file';
+  mediaData?: string; // base64 string
   status: 'sent' | 'delivered' | 'read';
   timestamp: number;
 }
