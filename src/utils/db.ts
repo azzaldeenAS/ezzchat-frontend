@@ -13,6 +13,7 @@ export interface LocalMessage {
   id?: number; // Auto-incremented local ID
   conversationId: string;
   senderId: string;
+  senderName?: string;
   text: string; // This is the DECRYPTED text
   status: 'sent' | 'delivered' | 'read';
   timestamp: number;
