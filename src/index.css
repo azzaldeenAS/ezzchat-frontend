@@ -98,6 +98,71 @@ body {
   transform: translateY(-2px);
 }
 
+.google-btn {
+  background: white !important;
+  color: #333 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  border: 1px solid #ddd !important;
+}
+
+.google-btn:hover {
+  background: #f8f9fa !important;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0;
+  color: var(--text-muted);
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+.divider span {
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+
+.toggle-auth {
+  margin-top: 20px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.toggle-auth span {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.toggle-auth span:hover {
+  text-decoration: underline;
+}
+
+.error-msg {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+
+.logout-btn {
+  cursor: pointer;
+}
+.logout-btn:hover {
+  text-decoration: underline;
+  color: #ef4444 !important;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
