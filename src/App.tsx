@@ -169,7 +169,7 @@ export const App: React.FC = () => {
     await saveMessageOffline(newMsg);
     
     socket.emit('group_message', {
-      groupId: 'zero',
+      groupId: 'group_zero',
       senderName: user.name,
       encryptedText
     });
