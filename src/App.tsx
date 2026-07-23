@@ -10,8 +10,14 @@ import './index.css';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_API_URL || 'https://ezzchat-backend.onrender.com';
 
+interface OnlineUser {
+  id: string;
+  name: string;
+}
+
 export const App: React.FC = () => {
   const [user, setUser] = useState<{ id: string, name: string, email?: string } | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [emailInput, setEmailInput] = useState('');
@@ -20,7 +26,8 @@ export const App: React.FC = () => {
   const [authError, setAuthError] = useState('');
 
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [activeConversation, setActiveConversation] = useState<string>('group_zero');
+  const [activeConversation, setActiveConversation] = useState<{id: string, name: string, isGroup: boolean}>({id: 'group_zero', name: 'Public Lounge', isGroup: true});
+  
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,8 +41,8 @@ export const App: React.FC = () => {
   const audioChunksRef = useRef<Blob[]>([]);
 
   const localMessages = useLiveQuery(
-    () => db.messages.where('conversationId').equals(activeConversation).sortBy('timestamp'),
-    [activeConversation]
+    () => db.messages.where('conversationId').equals(activeConversation.id).sortBy('timestamp'),
+    [activeConversation.id]
   );
 
   useEffect(() => {
@@ -114,15 +121,19 @@ export const App: React.FC = () => {
       });
     }
 
-    const newSocket = io(BACKEND_URL, { auth: { userId: loggedInUser.id } });
+    const newSocket = io(BACKEND_URL, { auth: { userId: loggedInUser.id, userName: loggedInUser.name } });
 
     newSocket.on('connect', () => {
       newSocket.emit('join_group', 'group_zero');
     });
 
-    newSocket.on('receive_group', async (data) => {
-      if(data.senderId === loggedInUser.id) return;
-      
+    newSocket.on('online_users_list', (users: OnlineUser[]) => {
+      // Filter out self
+      setOnlineUsers(users.filter(u => u.id !== loggedInUser.id));
+    });
+
+    const handleIncomingMessage = async (data: any, isGroup: boolean) => {
+      if (data.senderId === loggedInUser.id) return;
       const privateKeyBase64 = localStorage.getItem('ezzchat_private_key') || '';
       let plainText = '🔒 Encrypted Message';
       try {
@@ -130,7 +141,7 @@ export const App: React.FC = () => {
       } catch (e) {}
 
       await saveMessageOffline({
-        conversationId: 'group_zero',
+        conversationId: isGroup ? data.groupId : data.senderId,
         senderId: data.senderId,
         senderName: data.senderName,
         text: plainText,
@@ -139,7 +150,10 @@ export const App: React.FC = () => {
         status: 'delivered',
         timestamp: data.timestamp
       });
-    });
+    };
+
+    newSocket.on('receive_group', (data) => handleIncomingMessage(data, true));
+    newSocket.on('receive_private', (data) => handleIncomingMessage(data, false));
 
     setSocket(newSocket);
   };
@@ -150,7 +164,7 @@ export const App: React.FC = () => {
     const encryptedText = await encryptMsg(text, pubKey);
 
     const newMsg = {
-      conversationId: activeConversation,
+      conversationId: activeConversation.id,
       senderId: user.id,
       senderName: user.name,
       text, 
@@ -162,13 +176,22 @@ export const App: React.FC = () => {
 
     await saveMessageOffline(newMsg);
     
-    socket.emit('group_message', {
-      groupId: 'group_zero',
-      senderName: user.name,
-      encryptedText,
-      type,
-      mediaData
-    });
+    if (activeConversation.isGroup) {
+      socket.emit('group_message', {
+        groupId: activeConversation.id,
+        senderName: user.name,
+        encryptedText,
+        type,
+        mediaData
+      });
+    } else {
+      socket.emit('private_message', {
+        recipientId: activeConversation.id,
+        encryptedText,
+        type,
+        mediaData
+      });
+    }
   };
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -238,7 +261,7 @@ export const App: React.FC = () => {
       const res = await fetch(`${BACKEND_URL}/api/call/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: activeConversation, userId: user.id })
+        body: JSON.stringify({ roomId: activeConversation.id, userId: user.id })
       });
       const data = await res.json();
       if(data.token) {
@@ -326,13 +349,35 @@ export const App: React.FC = () => {
           </div>
         </div>
         <div className="chat-list">
-          <div className="chat-item active">
+          <div style={{padding: '10px 15px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold'}}>GROUPS</div>
+          <div 
+            className={`chat-item ${activeConversation.id === 'group_zero' ? 'active' : ''}`}
+            onClick={() => setActiveConversation({id: 'group_zero', name: 'Public Lounge', isGroup: true})}
+          >
             <div className="avatar" style={{background: 'var(--accent)'}}>#</div>
             <div>
               <div style={{ fontWeight: 600 }}>Public Lounge</div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Global Chat Room</div>
             </div>
           </div>
+
+          <div style={{padding: '10px 15px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginTop: '10px'}}>ONLINE USERS ({onlineUsers.length})</div>
+          {onlineUsers.map(ou => (
+            <div 
+              key={ou.id}
+              className={`chat-item ${activeConversation.id === ou.id ? 'active' : ''}`}
+              onClick={() => setActiveConversation({id: ou.id, name: ou.name, isGroup: false})}
+            >
+              <div className="avatar" style={{background: '#10b981'}}>{ou.name.charAt(0).toUpperCase()}</div>
+              <div>
+                <div style={{ fontWeight: 600 }}>{ou.name}</div>
+                <div style={{ fontSize: '0.8rem', color: '#10b981' }}>Online</div>
+              </div>
+            </div>
+          ))}
+          {onlineUsers.length === 0 && (
+            <div style={{padding: '10px 15px', fontSize: '0.8rem', color: 'var(--text-muted)'}}>No one else is online</div>
+          )}
         </div>
 
         <div className="copyright-sidebar">
@@ -345,10 +390,14 @@ export const App: React.FC = () => {
       <div className="main-chat">
         <div className="chat-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div className="avatar" style={{background: 'var(--accent)'}}>#</div>
+            <div className="avatar" style={{background: activeConversation.isGroup ? 'var(--accent)' : '#10b981'}}>
+              {activeConversation.isGroup ? '#' : activeConversation.name.charAt(0).toUpperCase()}
+            </div>
             <div>
-              <h3>Public Lounge</h3>
-              <span style={{ fontSize: '0.85rem', color: '#10b981' }}>● Online</span>
+              <h3>{activeConversation.name}</h3>
+              <span style={{ fontSize: '0.85rem', color: '#10b981' }}>
+                {activeConversation.isGroup ? '● Global Room' : '● Online'}
+              </span>
             </div>
           </div>
           <div className="header-actions">
@@ -360,7 +409,7 @@ export const App: React.FC = () => {
           {localMessages?.length === 0 && (
             <div className="empty-chat">
               <span>👋</span>
-              <p>Welcome! Send the first secure message.</p>
+              <p>Say hello to {activeConversation.name}!</p>
             </div>
           )}
           {localMessages?.map((msg: any) => {
@@ -401,7 +450,7 @@ export const App: React.FC = () => {
           <input 
             value={inputText} 
             onChange={e => setInputText(e.target.value)} 
-            placeholder={isRecording ? "Recording audio..." : "Type a secure message..."}
+            placeholder={isRecording ? "Recording audio..." : `Message ${activeConversation.name}...`}
             disabled={isRecording}
           />
 
