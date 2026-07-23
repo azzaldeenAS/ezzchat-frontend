@@ -163,6 +163,22 @@ body {
   color: #ef4444 !important;
 }
 
+.copyright-text {
+  margin-top: 30px;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.copyright-sidebar {
+  padding: 15px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #64748b;
+  border-top: 1px solid var(--border);
+  background: var(--bg-dark);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }

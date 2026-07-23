@@ -246,6 +246,12 @@ export const App: React.FC = () => {
               {isLoginMode ? 'Sign up' : 'Login'}
             </span>
           </div>
+
+          <div className="copyright-text">
+            حقوق الطبع محفوظة للمهندس عزالدين الرهمي ©️
+            <br />
+            رقم التواصل: <span dir="ltr">+967 777 320 031</span>
+          </div>
         </div>
       </div>
     );
@@ -290,6 +296,12 @@ export const App: React.FC = () => {
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Global Chat Room</div>
             </div>
           </div>
+        </div>
+
+        <div className="copyright-sidebar">
+          حقوق الطبع محفوظة للمهندس عزالدين الرهمي ©️
+          <br />
+          <span dir="ltr">+967 777 320 031</span>
         </div>
       </div>
 
