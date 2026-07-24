@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # 1. Backend API (Node.js/TypeScript)
+  backend:
+    image: node:20-alpine
+    container_name: ezzchat_backend
+    working_dir: /app
+    command: sh -c "npm install && npx prisma generate || true && npm run dev"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://ezzchat_user:ezzchat_pass@postgres:5432/ezzchat_db
+      - REDIS_URL=redis://redis:6379
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secretkey
+    depends_on:
+      - postgres
+      - redis
+      - livekit
+    restart: unless-stopped
+    # Optimized for Oracle Cloud Always Free (ARM64)
+    platform: linux/arm64
+
+  # Frontend (Vite/React)
+  frontend:
+    image: node:20-alpine
+    container_name: ezzchat_frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3000"
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    platform: linux/arm64
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+  # 2. PostgreSQL (Database for Users & Messages)
+  postgres:
+    image: postgres:15-alpine
+    container_name: ezzchat_postgres
+    environment:
+      POSTGRES_USER: ezzchat_user
+      POSTGRES_PASSWORD: ezzchat_pass
+      POSTGRES_DB: ezzchat_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    platform: linux/arm64
+
+  # 3. Redis (Pub/Sub for Groups & WebSocket Sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: ezzchat_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    platform: linux/arm64
+
+  # 4. LiveKit Server (Video/Audio Engine acting as SFU/TURN)
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: ezzchat_livekit
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"     # API & WebSockets
+      - "7881:7881"     # TCP (WebRTC)
+      - "7882:7882/udp" # UDP (WebRTC)
+    environment:
+      - LIVEKIT_KEYS=devkey:secretkey
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    restart: unless-stopped
+    platform: linux/arm64
+
+volumes:
+  postgres_data:
+  redis_data:
