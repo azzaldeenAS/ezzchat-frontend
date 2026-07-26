@@ -186,8 +186,8 @@ export const App: React.FC = () => {
     // Connect to LiveKit Background Presence Room
     const connectLiveKit = async () => {
       try {
-        // Change localhost to your production backend URL later
-        const res = await fetch('http://localhost:8000/api/call/token', {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+        const res = await fetch(`${backendUrl}/api/call/token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identity: currentUser })
