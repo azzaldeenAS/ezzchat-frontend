@@ -128,7 +128,7 @@ export const App: React.FC = () => {
   const [lastSeen, setLastSeen] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Audio recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
