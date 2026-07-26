@@ -222,34 +222,13 @@ export const App: React.FC = () => {
       navigator.serviceWorker.register('/sw.js').then(async (registration) => {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          const subscription = await registration.pushManager.subscribe({
+          await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
           });
-          // Push Subscription could be saved to Supabase users table here
         }
       }).catch(console.error);
     }
-
-    // Connect to LiveKit Background Presence Room
-    const connectLiveKit = async () => {
-      try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-        const res = await fetch(`${backendUrl}/api/call/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identity: currentUser })
-        });
-        const data = await res.json();
-        if (data.token) {
-          setLiveKitToken(data.token);
-          setLiveKitUrl(data.url);
-        }
-      } catch (err) {
-        console.error("Failed to fetch LiveKit token");
-      }
-    };
-    connectLiveKit();
 
     return () => { supabase.removeChannel(channel); };
   }, [session, activeConversation, currentUser]);
@@ -431,11 +410,26 @@ export const App: React.FC = () => {
 
   const startCall = async (video: boolean) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video });
-      stream.getTracks().forEach(track => track.stop());
-      setIsInCall(true);
+      // Fetch token from the correct live backend
+      const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'https://ezzchat-backend.onrender.com';
+      const res = await fetch(`${backendUrl}/api/call/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity: currentUser, roomName: activeConversation })
+      });
+      const data = await res.json();
+      
+      if (data.token) {
+        setLiveKitToken(data.token);
+        setLiveKitUrl(data.url || import.meta.env.VITE_LIVEKIT_URL || 'wss://ezzchat-u6d2le0b.livekit.cloud');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video });
+        stream.getTracks().forEach(track => track.stop());
+        setIsInCall(true);
+      }
     } catch (err) {
-      alert('❌ Permission denied! Allow microphone/camera to make calls.');
+      console.error(err);
+      alert('❌ Permission denied or failed to connect! Allow microphone/camera to make calls.');
     }
   };
 
@@ -568,6 +562,9 @@ export const App: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+        <div className="copyright-sidebar" style={{ padding: '15px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-glass)' }}>
+          حقوق الطبع محفوظة للمهندس عزالدين الرهمي ©️
         </div>
       </div>
 
