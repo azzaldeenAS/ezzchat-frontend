@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, saveMessageOffline } from './utils/db';
 import { encryptMsg, decryptMsg, generateKeys } from './utils/crypto';
 import { supabase } from './utils/supabase';
-import { LiveKitRoom, useRoomContext } from '@livekit/components-react';
+import { LiveKitRoom, useRoomContext, useTracks, VideoTrack, AudioTrack } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 import './index.css';
 
@@ -50,6 +51,52 @@ const compressImage = (file: File): Promise<Blob> => {
   });
 };
 
+const CallView = ({ onEndCall }: { onEndCall: () => void }) => {
+  const room = useRoomContext();
+  const cameraTracks = useTracks([Track.Source.Camera]);
+  const micTracks = useTracks([Track.Source.Microphone]);
+
+  const setCamera = async (facingMode: 'user' | 'environment') => {
+    try {
+      await room.localParticipant.setCameraEnabled(true, { facingMode });
+      await room.localParticipant.setMicrophoneEnabled(true);
+    } catch (e) {
+      console.error(e);
+      alert('Camera access error');
+    }
+  };
+
+  const endCall = async () => {
+    await room.localParticipant.setCameraEnabled(false);
+    await room.localParticipant.setMicrophoneEnabled(false);
+    onEndCall();
+  };
+
+  return (
+    <div className="call-view">
+      <div className="video-grid">
+        {cameraTracks.map((trackRef) => (
+          <VideoTrack key={trackRef.participant.identity + trackRef.source} trackRef={trackRef} />
+        ))}
+        {micTracks.map((trackRef) => (
+          <AudioTrack key={trackRef.participant.identity + trackRef.source} trackRef={trackRef} />
+        ))}
+      </div>
+      <div className="call-controls">
+        <button className="control-btn" onClick={() => setCamera('user')}>
+          الكاميرا الأمامية
+        </button>
+        <button className="control-btn" onClick={() => setCamera('environment')}>
+          الكاميرا الخلفية
+        </button>
+        <button className="control-btn end-call-btn" onClick={endCall}>
+          إنهاء المكالمة
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -89,6 +136,7 @@ export const App: React.FC = () => {
   const isRecordingRef = useRef(false);
   
   const [channelRef, setChannelRef] = useState<any>(null);
+  const [isInCall, setIsInCall] = useState(false);
 
   // Offline-First: Load instantly from IndexedDB (preserves previous zero-cost features)
   const localMessages = useLiveQuery(
@@ -384,10 +432,8 @@ export const App: React.FC = () => {
   const startCall = async (video: boolean) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video });
-      alert(`✅ Permissions granted! Connect to LiveKit Backend API...\n(Stream active with ${video ? 'Video & Audio' : 'Audio only'})`);
       stream.getTracks().forEach(track => track.stop());
-      
-      // Backend Request for LiveKit Token goes here
+      setIsInCall(true);
     } catch (err) {
       alert('❌ Permission denied! Allow microphone/camera to make calls.');
     }
@@ -478,16 +524,18 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* Hidden LiveKit Background Connection for incoming rings */}
+      {/* Hidden or Fullscreen LiveKit Connection */}
       {liveKitToken && (
         <LiveKitRoom
-          video={false}
+          video={false} // CallView toggles this
           audio={false}
           token={liveKitToken}
           serverUrl={liveKitUrl}
           connect={true}
-          style={{ display: 'none' }}
-        />
+          className={isInCall ? 'livekit-fullscreen' : 'livekit-hidden'}
+        >
+          {isInCall && <CallView onEndCall={() => setIsInCall(false)} />}
+        </LiveKitRoom>
       )}
       <div className="sidebar">
         <div className="sidebar-header" style={{ paddingBottom: 0 }}>

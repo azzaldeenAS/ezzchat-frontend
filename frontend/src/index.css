@@ -46,6 +46,7 @@ body {
   box-shadow: var(--shadow-glass);
   display: flex;
   overflow: hidden;
+  position: relative; /* Added for the Call UI Overlay */
   animation: fadeIn 0.5s ease-out;
   user-select: none;
   -webkit-user-select: none;
@@ -366,3 +367,95 @@ body {
     flex-shrink: 0;
   }
 }
+
+/* --- Call View UI --- */
+.livekit-hidden {
+  display: none !important;
+}
+
+.livekit-fullscreen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
+  background: var(--bg-dark);
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.call-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+
+.video-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 15px;
+  padding: 20px;
+  align-content: center;
+  justify-content: center;
+}
+
+.video-grid video {
+  width: 100%;
+  height: 100%;
+  max-height: 80vh;
+  object-fit: cover;
+  border-radius: 16px;
+  background: #111;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+.call-controls {
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  flex-wrap: wrap; /* responsive wrapping */
+}
+
+.control-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  backdrop-filter: blur(10px);
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.end-call-btn {
+  background: #ef4444;
+  border-color: #dc2626;
+  font-weight: 600;
+}
+
+.end-call-btn:hover {
+  background: #dc2626;
+}
+
+@media (max-width: 480px) {
+  .control-btn {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+}
+
