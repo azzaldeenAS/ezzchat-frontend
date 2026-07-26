@@ -564,7 +564,7 @@ export const App: React.FC = () => {
           ))}
         </div>
         <div className="copyright-sidebar" style={{ padding: '15px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-glass)' }}>
-          حقوق الطبع محفوظة للمهندس عزالدين الرهمي ©️
+          حقوق الطبع محفوظة للمهندس عزالدين الرهمي ©️ 777320031
         </div>
       </div>
 
